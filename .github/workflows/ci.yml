@@ -1,0 +1,41 @@
+name: CI
+
+# Lint, unit tests with coverage thresholds, the frame shell's JVM tests, and a
+# CDK synth (which also bundles every Lambda). No AWS credentials are needed or
+# available here; deploys are run locally (docs/operations.md).
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v5
+        with:
+          version: 9.15.0
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm coverage
+        env:
+          JAVA_17_HOME: ${{ env.JAVA_HOME }}
+      - run: pnpm --filter @kids-dash/frame-web build
+      - run: pnpm synth

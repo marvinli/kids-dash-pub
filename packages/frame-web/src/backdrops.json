@@ -1,0 +1,257 @@
+{
+  "candy-land": {
+    "day": 0.8741,
+    "dusk": 0.3616,
+    "night": 0.0142
+  },
+  "capybara-hot-spring": {
+    "day": 0.6796,
+    "dusk": 0.3027,
+    "night": 0.0114
+  },
+  "christmas": {
+    "day": 0.6721,
+    "dusk": 0.3476,
+    "night": 0.0122
+  },
+  "cloud-kingdom": {
+    "day": 0.6335,
+    "dusk": 0.3222,
+    "night": 0.0108
+  },
+  "crystal-cave": {
+    "day": 0.5757,
+    "dusk": 0.3505,
+    "night": 0.0116
+  },
+  "deep-sea": {
+    "day": 0.5919,
+    "dusk": 0.1011,
+    "night": 0.0077
+  },
+  "dinosaur-valley": {
+    "day": 0.7069,
+    "dusk": 0.3364,
+    "night": 0.0118
+  },
+  "earth-day": {
+    "day": 0.7616,
+    "dusk": 0.3352,
+    "night": 0.0162
+  },
+  "easter": {
+    "day": 0.7868,
+    "dusk": 0.3783,
+    "night": 0.0135
+  },
+  "fall": {
+    "day": 0.843,
+    "dusk": 0.3875,
+    "night": 0.0541
+  },
+  "fall-forest": {
+    "day": 0.7529,
+    "dusk": 0.3182,
+    "night": 0.0068
+  },
+  "fall-geese-pond": {
+    "day": 0.7433,
+    "dusk": 0.3366,
+    "night": 0.0077
+  },
+  "fall-hayride": {
+    "day": 0.8469,
+    "dusk": 0.3655,
+    "night": 0.0101
+  },
+  "fourth-of-july": {
+    "day": 0.7874,
+    "dusk": 0.4124,
+    "night": 0.0116
+  },
+  "groundhog-day": {
+    "day": 0.7309,
+    "dusk": 0.3693,
+    "night": 0.0087
+  },
+  "halloween": {
+    "day": 0.6985,
+    "dusk": 0.3655,
+    "night": 0.0496
+  },
+  "hanukkah": {
+    "day": 0.7393,
+    "dusk": 0.4165,
+    "night": 0.0523
+  },
+  "hanukkah-lights": {
+    "day": 0.7303,
+    "dusk": 0.3291,
+    "night": 0.01
+  },
+  "jungle-treehouse": {
+    "day": 0.8715,
+    "dusk": 0.3576,
+    "night": 0.015
+  },
+  "lunar-new-year": {
+    "day": 0.7054,
+    "dusk": 0.3345,
+    "night": 0.0115
+  },
+  "moon-base": {
+    "day": 0.3921,
+    "dusk": 0.2598,
+    "night": 0.0114
+  },
+  "mushroom-forest": {
+    "day": 0.6729,
+    "dusk": 0.3266,
+    "night": 0.01
+  },
+  "new-year": {
+    "day": 0.728,
+    "dusk": 0.3562,
+    "night": 0.051
+  },
+  "outer-space": {
+    "day": 0.6414,
+    "dusk": 0.3015,
+    "night": 0.0079
+  },
+  "passover": {
+    "day": 0.7657,
+    "dusk": 0.3487,
+    "night": 0.0112
+  },
+  "pirate-cove": {
+    "day": 0.7946,
+    "dusk": 0.3353,
+    "night": 0.0107
+  },
+  "purim": {
+    "day": 0.7106,
+    "dusk": 0.2936,
+    "night": 0.0097
+  },
+  "rosh-hashanah": {
+    "day": 0.7152,
+    "dusk": 0.3022,
+    "night": 0.0098
+  },
+  "savanna-safari": {
+    "day": 0.653,
+    "dusk": 0.3388,
+    "night": 0.0075
+  },
+  "spring": {
+    "day": 0.725,
+    "dusk": 0.374,
+    "night": 0.0588
+  },
+  "spring-garden": {
+    "day": 0.826,
+    "dusk": 0.3236,
+    "night": 0.0082
+  },
+  "spring-kites": {
+    "day": 0.8027,
+    "dusk": 0.403,
+    "night": 0.0071
+  },
+  "spring-rain": {
+    "day": 0.7661,
+    "dusk": 0.4319,
+    "night": 0.0145
+  },
+  "st-patricks": {
+    "day": 0.9165,
+    "dusk": 0.4051,
+    "night": 0.0127
+  },
+  "sukkot": {
+    "day": 0.6924,
+    "dusk": 0.347,
+    "night": 0.0092
+  },
+  "summer": {
+    "day": 0.8072,
+    "dusk": 0.402,
+    "night": 0.0508
+  },
+  "summer-boardwalk": {
+    "day": 0.7107,
+    "dusk": 0.3203,
+    "night": 0.0114
+  },
+  "summer-camping": {
+    "day": 0.6883,
+    "dusk": 0.2926,
+    "night": 0.0104
+  },
+  "summer-sunflowers": {
+    "day": 0.8242,
+    "dusk": 0.3726,
+    "night": 0.007
+  },
+  "teddy-bear-picnic": {
+    "day": 0.8161,
+    "dusk": 0.3677,
+    "night": 0.0128
+  },
+  "thanksgiving": {
+    "day": 0.8261,
+    "dusk": 0.3673,
+    "night": 0.0603
+  },
+  "train-mountains": {
+    "day": 0.6852,
+    "dusk": 0.2973,
+    "night": 0.0117
+  },
+  "tu-bishvat": {
+    "day": 0.6959,
+    "dusk": 0.3244,
+    "night": 0.0166
+  },
+  "underground-burrows": {
+    "day": 0.7493,
+    "dusk": 0.3331,
+    "night": 0.0164
+  },
+  "underwater-reef": {
+    "day": 0.8737,
+    "dusk": 0.3906,
+    "night": 0.0136
+  },
+  "valentines": {
+    "day": 0.7892,
+    "dusk": 0.3801,
+    "night": 0.0748
+  },
+  "volcano-island": {
+    "day": 0.7755,
+    "dusk": 0.2992,
+    "night": 0.0096
+  },
+  "winter": {
+    "day": 0.7781,
+    "dusk": 0.3788,
+    "night": 0.048
+  },
+  "winter-arctic": {
+    "day": 0.8297,
+    "dusk": 0.3734,
+    "night": 0.0109
+  },
+  "winter-skating": {
+    "day": 0.8737,
+    "dusk": 0.4078,
+    "night": 0.0097
+  },
+  "winter-village": {
+    "day": 0.6825,
+    "dusk": 0.3889,
+    "night": 0.0158
+  }
+}

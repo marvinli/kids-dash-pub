@@ -1,0 +1,48 @@
+node_modules
+.pnpm-store
+
+# build outputs
+dist
+build
+coverage
+.turbo
+*.tsbuildinfo
+
+# CDK
+cdk.out
+.cdk.staging
+outputs.json
+
+# env / secrets
+.env
+.env.*
+!.env.example
+*.p12
+*.pem
+adbkey*
+
+# Private, never committed: device recovery evidence, bootloader backups, ADB
+# authorization material, the throwaway prototype. See docs/device/frameo.md.
+/local/
+
+# Python tooling for scripts/art
+.venv/
+__pycache__/
+
+# editor / OS
+.DS_Store
+.idea
+.vscode/*
+!.vscode/extensions.json
+
+# logs
+*.log
+
+# Claude Code local/runtime artifacts
+.claude/*.lock
+.claude/settings.local.json
+.claude/worktrees/
+
+# Deployment configuration (copy the tracked examples)
+/.mcp.json
+/packages/frame-android/frame.config.json

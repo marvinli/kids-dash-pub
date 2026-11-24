@@ -1,0 +1,26 @@
+{
+  "name": "kids-dash",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "prepare": "git config core.hooksPath .githooks || true",
+    "build": "turbo build",
+    "lint": "turbo lint && biome check scripts .mcp.example.json packages/frame-android/frame.config.example.json && pnpm audit:share",
+    "test": "turbo test && node --test scripts/*.test.mjs scripts/google/*.test.mjs packages/frame-android/scripts/*.test.mjs",
+    "coverage": "turbo coverage && node --test scripts/*.test.mjs scripts/google/*.test.mjs packages/frame-android/scripts/*.test.mjs",
+    "check": "biome check --write .",
+    "format": "biome format --write .",
+    "synth": "pnpm --filter @kids-dash/infra synth",
+    "deploy": "pnpm --filter @kids-dash/infra run deploy",
+    "audit:share": "node scripts/check-shareable.mjs"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.6.8",
+    "esbuild": "^0.28.2",
+    "turbo": "^2.11.11",
+    "typescript": "~5.9.3"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

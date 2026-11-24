@@ -1,0 +1,19 @@
+{
+  "name": "@kids-dash/frame-android",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The frame's Android shell: kiosk WebView, signed-bundle fetch and verification, chore check-offs.",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node build.mjs --test",
+    "lint": "biome check build.mjs scripts",
+    "frame:install": "node scripts/frame.mjs install",
+    "frame:provision": "node scripts/frame.mjs provision",
+    "frame:screenshot": "node scripts/frame.mjs screenshot",
+    "coverage": "node build.mjs --test"
+  },
+  "devDependencies": {
+    "@kids-dash/frame-web": "workspace:*"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "kids-dash": {
+      "command": "node",
+      "args": ["packages/mcp/dist/server.js"],
+      "env": {
+        "KIDS_DASH_API_URL": "https://<api-id>.execute-api.<region>.amazonaws.com",
+        "AWS_PROFILE": "<your-profile>"
+      }
+    }
+  }
+}

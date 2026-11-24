@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="dev.kidsdash.frame">
+
+    <!-- versionCode/versionName are stamped by build.mjs (aapt2 only injects
+         them when the manifest leaves them out). -->
+
+    <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="27" />
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Sleep: turning the screen back on when the sleep window ends. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Self-updates (silent because the app is device owner). -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- The settings panel: which network the frame is on. Location is what
+         Android 8.1 requires to read the Wi-Fi name; the device owner grants it. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- A "back to the dashboard" button over Wi-Fi settings (the frame has no
+         Back or Home key); granted once by scripts/frame.mjs owner. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
+    <!-- No backups (the device token must not leave the frame), no cleartext. -->
+    <application
+        android:name=".FrameApp"
+        android:label="Kids Dashboard"
+        android:theme="@android:style/Theme.Material.Light.NoActionBar.Fullscreen"
+        android:allowBackup="false"
+        android:usesCleartextTraffic="false"
+        android:hardwareAccelerated="true">
+
+        <!-- The dashboard. HOME so the frame boots into it; LAUNCHER for adb. -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:screenOrientation="landscape"
+            android:configChanges="orientation|screenSize|keyboard|keyboardHidden|navigation">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <receiver android:name=".SleepAlarmReceiver" android:exported="false" />
+
+        <!-- Device owner (scripts/frame.mjs owner), for silent self-updates. -->
+        <receiver
+            android:name=".FrameAdmin"
+            android:label="Kids Dashboard"
+            android:exported="true"
+            android:permission="android.permission.BIND_DEVICE_ADMIN">
+            <meta-data
+                android:name="android.app.device_admin"
+                android:resource="@xml/device_owner" />
+            <intent-filter>
+                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Install results, and relaunching after an update. -->
+        <receiver android:name=".UpdateReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

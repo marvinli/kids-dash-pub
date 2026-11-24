@@ -1,0 +1,2569 @@
+/*
+ * Laid out at a fixed 1920×1080 (the frame's resolution at 1:1). Performance
+ * rules for the RK3326's weak GPU: nothing scrolls; the only animation is a
+ * transform; no filters, blurs or soft shadows (offset shadows are
+ * solid and static); text that might be long is clipped, never wrapped into an
+ * overflow.
+ */
+
+@font-face {
+  font-family: Fredoka;
+  font-weight: 500;
+  src: url("fonts/fredoka-500.woff2") format("woff2");
+}
+@font-face {
+  font-family: Fredoka;
+  font-weight: 600;
+  src: url("fonts/fredoka-600.woff2") format("woff2");
+}
+@font-face {
+  font-family: Nunito;
+  font-weight: 700;
+  src: url("fonts/nunito-700.woff2") format("woff2");
+}
+@font-face {
+  font-family: Nunito;
+  font-weight: 800;
+  src: url("fonts/nunito-800.woff2") format("woff2");
+}
+
+:root {
+  /* How opaque the big cards are over the season/holiday backdrop: enough for
+     text, little enough that the painting shows through their empty space. */
+  --frost: 68%;
+  /* Frosted panels: under each panel's tint, the backdrop's pre-blurred copy
+     (--frost-image, set with the backdrop), offset by the panel's own position
+     (--bx/--by, set by the page after layout) so it lines up with the painting
+     behind. A static image: no backdrop-filter, which this GPU cannot afford. */
+  --ink: #4a3a3a;
+  --muted: #6b5555;
+  --paper: #fff7ee;
+  --lavender: #564a72;
+  --display: Fredoka, "Trebuchet MS", sans-serif;
+  --body: Nunito, "Trebuchet MS", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  /* No grey/blue flash over tapped cards (WebView's default tap highlight). */
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--body);
+  font-weight: 700;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+img {
+  display: block;
+  object-fit: contain;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+button:active {
+  transform: scale(0.97);
+}
+
+#app {
+  position: relative;
+  width: 1920px;
+  height: 1080px;
+  overflow: hidden;
+  transform-origin: 0 0;
+}
+
+/*
+ * Screens switch instantly between three pre-rasterized GPU layers. Measured on
+ * the frame with the same tap sequence (gfxinfo, 2026-11-15):
+ *   180 ms opacity cross-fade        median 19 ms, p90 40 ms, 70% janky
+ *   instant, display:none            median 15 ms, p90 23 ms, 43% janky
+ *   instant, will-change layers      median 13 ms, p90 24 ms, 32% janky
+ * Keeping each screen its own layer costs ~8 MB of GPU memory per screen and
+ * means a switch only recomposites; nothing is repainted.
+ */
+.screen {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  will-change: opacity;
+}
+
+.screen.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.screen-inner {
+  height: 1080px;
+  /* Room around the edges for the season/holiday backdrop to frame the dashboard. */
+  padding: 44px 68px 50px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  background: var(--paper);
+}
+
+/* The season/holiday painting behind every screen: one static layer under
+   the screens (they are transparent over it), so switching screens never
+   repaints it. Without a backdrop the screens keep their own colour pools.
+   Around sunrise and sunset --backdrop-image is a -webkit-cross-fade() of the
+   day/dusk/night paintings, stepped a few times (frame-web sky.ts): one static
+   repaint per step, never an animation. */
+.backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--paper) var(--backdrop-image, none) center / cover no-repeat;
+}
+
+/* The header sits straight on the painting. Over a dark band (night, or a
+   dark scene such as space; picked per painting by frame-web sky.ts) its text
+   turns light, with a hard offset shadow (no blur: see the rules at the top). */
+.greet-name {
+  color: var(--name-ink);
+}
+
+[data-header="light"] .top h1,
+[data-header="light"] .clock-time {
+  color: #fff7ee;
+  text-shadow: 0 4px 0 rgba(28, 22, 52, 0.55);
+}
+
+[data-header="light"] .top .subline:not(.family-notes),
+[data-header="light"] .clock-date,
+[data-header="light"] .week-dates,
+[data-header="light"] .gear-button {
+  color: #f1e8ff;
+  text-shadow: 0 2px 0 rgba(28, 22, 52, 0.6);
+}
+
+[data-header="light"] .greet-name {
+  color: var(--name-light);
+}
+
+/* Beats the per-screen colour pools below (same specificity, so it needs the
+   extra class to win regardless of order). */
+[data-backdrop] .screen-inner.screen-inner {
+  background: transparent;
+}
+
+/* Soft colour pools in the corners: static gradients, painted once. */
+.screen-inner.today {
+  background:
+    radial-gradient(circle at 0% 100%, #ffe1ea 0, rgba(255, 225, 234, 0) 26%),
+    radial-gradient(circle at 100% 0%, #dff0ff 0, rgba(223, 240, 255, 0) 24%),
+    radial-gradient(circle at 46% 108%, #ece5ff 0, rgba(236, 229, 255, 0) 22%), var(--paper);
+}
+
+.screen-inner.week {
+  background:
+    radial-gradient(circle at 100% 100%, #e3d8ff 0, rgba(227, 216, 255, 0) 30%),
+    radial-gradient(circle at 0% 0%, #ffe9f0 0, rgba(255, 233, 240, 0) 22%), #f4efff;
+  gap: 24px;
+}
+
+.screen-inner.chores {
+  background:
+    radial-gradient(circle at 100% 0%, #fff1c4 0, rgba(255, 241, 196, 0) 24%),
+    radial-gradient(circle at 0% 100%, #d9f3df 0, rgba(217, 243, 223, 0) 28%), #f2fbf3;
+  gap: 24px;
+}
+
+.clip {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---------- Header ---------- */
+
+.top {
+  height: 116px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.week .top,
+.chores .top {
+  height: 100px;
+}
+
+.top h1 {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  font-family: var(--display);
+  font-size: 62px;
+  font-weight: 600;
+  letter-spacing: -1px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.greeting-art {
+  width: 84px;
+  height: 84px;
+  flex-shrink: 0;
+  margin: -10px 0 -10px -6px;
+}
+
+.greeting {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.subline {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--muted);
+}
+
+.week .subline {
+  color: var(--lavender);
+}
+
+.chores .subline {
+  color: #3f6447;
+}
+
+.family-notes {
+  display: flex;
+  gap: 12px;
+}
+
+.family-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #fff1a6;
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 4px 18px 4px 6px;
+  max-width: 520px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.top-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
+}
+
+.title-group {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+}
+
+.clock {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  margin-left: 24px;
+}
+
+.clock-time {
+  font-family: var(--display);
+  font-size: 88px;
+  font-weight: 600;
+  line-height: 0.9;
+  letter-spacing: -2px;
+}
+
+.clock-period {
+  font-size: 30px;
+  letter-spacing: 0;
+  margin-left: 8px;
+}
+
+.clock-date {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--muted);
+}
+
+.nav-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  background: #fff;
+  color: var(--ink);
+  border: 3px solid var(--ink);
+  border-radius: 999px;
+  padding: 12px 26px;
+  font-family: var(--display);
+  font-size: 24px;
+  font-weight: 600;
+}
+
+/* The header buttons on every screen: white, ink border, a chunky ink shadow. */
+.nav-button.header-button {
+  height: 72px;
+  min-height: 72px;
+  padding: 0 28px 0 22px;
+  border-width: 4px;
+  box-shadow: 0 4px 0 var(--ink);
+  font-size: 28px;
+}
+
+.nav-button.dark {
+  background: var(--ink);
+  color: #fff;
+}
+
+.header-button.chores-button {
+  padding: 0 16px 0 24px;
+}
+
+/* Icon only, round. */
+.header-button.photos-button {
+  width: 72px;
+  padding: 0;
+  justify-content: center;
+}
+
+.clock-date-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* A quiet icon beside the date; the padding makes a comfortable tap target. */
+.gear-button {
+  border: none;
+  background: none;
+  padding: 10px;
+  margin: -10px -2px -10px -10px;
+  color: var(--muted);
+  opacity: 0.7;
+  display: flex;
+  cursor: pointer;
+}
+
+/* Add an event (week screen "+") */
+.add-day {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 3px solid #ddd3ef;
+  background: #fff;
+  color: var(--lavender);
+  font-family: var(--display);
+  font-size: 32px;
+  font-weight: 600;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0 3px;
+  cursor: pointer;
+}
+
+.add-sheet {
+  width: 1500px;
+  gap: 14px;
+  padding: 30px 48px 28px;
+}
+
+.add-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.add-head .sheet-title {
+  font-size: 48px;
+  white-space: nowrap;
+}
+
+.add-step {
+  width: 64px;
+  height: 64px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  border: 3px solid var(--ink);
+  background: #fff;
+  font-family: var(--display);
+  font-size: 44px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--ink);
+  padding: 0 0 6px;
+  cursor: pointer;
+}
+
+.add-step:disabled {
+  opacity: 0.25;
+}
+
+.add-scope {
+  margin-left: auto;
+  flex-wrap: nowrap;
+}
+
+.add-description {
+  flex: 1;
+  min-width: 0;
+  height: 88px;
+  border: 4px solid #e3d8cf;
+  border-radius: 24px;
+  padding: 8px 20px;
+  font-family: var(--body);
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--ink);
+  background: #fff;
+  outline: none;
+  resize: none;
+  overflow: hidden;
+}
+
+.add-description:focus {
+  border-color: var(--ink);
+}
+
+.add-what {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.add-sticker {
+  width: 96px;
+  height: 96px;
+  flex-shrink: 0;
+}
+
+.add-title {
+  flex: 1;
+  min-width: 0;
+  height: 84px;
+  border: 4px solid var(--ink);
+  border-radius: 24px;
+  padding: 0 24px;
+  font-family: var(--display);
+  font-size: 40px;
+  font-weight: 600;
+  color: var(--ink);
+  background: #fff;
+  outline: none;
+}
+
+.add-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+}
+
+.add-label {
+  width: 120px;
+  flex-shrink: 0;
+  padding-top: 14px;
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--muted);
+}
+
+.add-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.add-chip {
+  min-width: 64px;
+  height: 58px;
+  padding: 0 20px;
+  border-radius: 999px;
+  border: 3px solid #e3d8cf;
+  background: #fff;
+  font-family: var(--display);
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.add-chip.hour {
+  min-width: 70px;
+  padding: 0 10px;
+}
+
+.add-chip.on {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
+}
+
+.add-chip.who {
+  height: 64px;
+  font-size: 30px;
+  padding: 0 28px;
+  background: var(--chip);
+  border-color: var(--chip);
+  color: var(--ink);
+}
+
+.add-chip.who.on {
+  border-color: var(--ink);
+  box-shadow: inset 0 0 0 2px var(--ink);
+}
+
+.add-when {
+  margin-left: 12px;
+  font-family: var(--display);
+  font-size: 30px;
+  font-weight: 600;
+  color: var(--lavender);
+}
+
+.add-stickers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.add-sticker-pick {
+  width: 64px;
+  height: 64px;
+  padding: 4px;
+  border-radius: 18px;
+  border: 3px solid transparent;
+  background: none;
+  cursor: pointer;
+}
+
+.add-sticker-pick img {
+  width: 52px;
+  height: 52px;
+}
+
+.add-sticker-pick.on {
+  border-color: var(--ink);
+  background: #fff;
+}
+
+.add-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 6px;
+}
+
+.add-status {
+  flex: 1;
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--muted);
+}
+
+.add-actions .nav-button {
+  height: 64px;
+  font-size: 28px;
+  padding: 0 34px;
+}
+
+.add-actions .nav-button:disabled {
+  opacity: 0.3;
+}
+
+/* Delete sits apart, at the left, as quiet text until it asks. */
+.add-delete {
+  height: 64px;
+  padding: 0 8px;
+  background: none;
+  border: none;
+  color: #b4233c;
+  font: inherit;
+  font-size: 26px;
+  font-weight: 800;
+}
+
+.add-actions .nav-button.danger {
+  background: #b4233c;
+  color: #fff;
+}
+
+.confirm-delete .add-status {
+  color: var(--ink);
+}
+
+/* Add a chore (Chores screen) */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.add-chore-button .plus {
+  font-family: var(--display);
+  font-size: 40px;
+  line-height: 1;
+  margin-top: -4px;
+}
+
+.add-chip.day {
+  min-width: 84px;
+  padding: 0 12px;
+}
+
+.add-sticker-pick.big {
+  width: 86px;
+  height: 86px;
+  border-radius: 22px;
+}
+
+.add-sticker-pick.big img {
+  width: 70px;
+  height: 70px;
+}
+
+/* Settings panel */
+.settings-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  min-height: 84px;
+  border-bottom: 2px dotted #e3d8cf;
+}
+
+.settings-label {
+  width: 220px;
+  flex-shrink: 0;
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--muted);
+}
+
+.settings-value {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--display);
+  font-size: 34px;
+  font-weight: 600;
+}
+
+.settings-action {
+  flex-shrink: 0;
+  font-size: 26px;
+}
+
+/* ---------- Cards ---------- */
+
+.card {
+  border-radius: 44px;
+}
+
+.pill-label {
+  align-self: flex-start;
+  background: rgba(255, 255, 255, 0.75);
+  border-radius: 999px;
+  padding: 8px 18px;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 2px;
+}
+
+/*
+ * Today: the header, the cards and the week strip on the left (the clock
+ * right-aligned with the cards), the rail down the whole right side.
+ */
+.today-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto 620px minmax(0, 1fr);
+  gap: 20px 26px;
+}
+
+.today-body > .top {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.today-main {
+  grid-column: 1;
+  grid-row: 2;
+  min-height: 0;
+  display: grid;
+  gap: 26px;
+}
+
+.today-body > .week-strip {
+  grid-column: 1;
+  grid-row: 3;
+}
+
+.today-body > .rail {
+  grid-column: 2;
+  grid-row: 1 / 4;
+}
+
+/* Today's right rail: fun modes on top, sleep at the foot. */
+.rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding: 6px 0 4px;
+}
+
+.rail-button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--ink);
+}
+
+.rail-icon {
+  position: relative;
+  width: 86px;
+  height: 86px;
+  border-radius: 999px;
+  background: #fff;
+  border: 4px solid var(--ink);
+  box-shadow: 0 4px 0 var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.rail-label {
+  font-family: var(--display);
+  font-size: 22px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 999px;
+  padding: 2px 12px;
+}
+
+.rail-new {
+  position: absolute;
+  top: -10px;
+  right: -14px;
+  background: #e8467c;
+  color: #fff;
+  border-radius: 999px;
+  padding: 3px 9px 1px;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+
+.rail-foot {
+  margin-top: auto;
+}
+
+/* Weather */
+
+.weather {
+  background:
+    linear-gradient(
+      color-mix(in srgb, var(--sky) var(--frost), transparent),
+      color-mix(in srgb, var(--sky) var(--frost), transparent)
+    ),
+    var(--frost-image, none) var(--bx, 0) var(--by, 0) / 1920px 1080px no-repeat;
+  height: 620px;
+  padding: 26px 30px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
+
+.weather-hero {
+  /* Temperature over high-low on the left, the sky sticker beside both. */
+  display: grid;
+  grid-template-columns: 1fr 190px;
+  grid-template-rows: auto auto;
+  column-gap: 12px;
+  row-gap: 22px;
+  padding: 0 4px 0 6px;
+}
+
+.weather-now {
+  align-self: start;
+  font-family: var(--display);
+  font-size: 132px;
+  font-weight: 600;
+  /* Tight box: the digits' cap height, so no air above them. */
+  line-height: 0.74;
+  letter-spacing: -3px;
+  margin-left: -6px; /* optical: digits sit inside their box */
+}
+
+.weather-sky-art {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  justify-self: center;
+  width: 176px;
+  height: 176px;
+  /* The sticker's transparent margin: let it hang into the padding. */
+  margin: -14px 0 -18px;
+}
+
+.weather-range {
+  grid-column: 1;
+  font-family: var(--display);
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.weather-range .dot {
+  margin: 0 4px;
+}
+
+/* One full-width strip, the same height whatever it says (see rainStrip). */
+.weather-rain {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 56px;
+  margin-top: -8px;
+  padding: 0 20px 0 16px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  color: #3d6e9e;
+  font-family: var(--display);
+  font-size: 27px;
+  font-weight: 600;
+  box-shadow: 0 4px 0 rgba(74, 58, 58, 0.08);
+}
+
+.weather-rain svg {
+  flex-shrink: 0;
+  color: #7cb8ec;
+}
+
+.rain-text {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rain-meter {
+  flex-shrink: 0;
+  width: 112px;
+  height: 14px;
+  border-radius: 999px;
+  background: #d6e7f7;
+  overflow: hidden;
+}
+
+.rain-meter > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #7cb8ec;
+}
+
+.rain-chance {
+  flex-shrink: 0;
+  min-width: 2.6em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.weather-rain.dry {
+  background: rgba(255, 255, 255, 0.45);
+  color: var(--muted);
+  box-shadow: none;
+}
+
+.weather-rain.wet {
+  background: #3d6e9e;
+  color: #fff;
+}
+
+.weather-rain.wet svg {
+  color: #bfe0ff;
+}
+
+.weather-rain.wet .rain-meter {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.weather-rain.wet .rain-meter > span {
+  background: #bfe0ff;
+}
+
+.wear {
+  flex: 1;
+  min-height: 0;
+  background: #fff;
+  border-radius: 32px;
+  padding: 10px 30px 10px 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 5px 0 rgba(74, 58, 58, 0.1);
+}
+
+.wear-piece {
+  white-space: nowrap;
+}
+
+.wear-bear {
+  width: 340px;
+  height: 340px;
+  flex-shrink: 0;
+  /* The sticker's wide transparent margin: overlap it so the tip keeps its room. */
+  margin: 0 -52px 0 -44px;
+}
+
+.wear-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.wear-label {
+  align-self: flex-start;
+  background: var(--ink);
+  color: #fff;
+  border-radius: 999px;
+  /* Capitals sit high in Nunito's line box: more room above than below centres them. */
+  padding: 4px 12px 1px;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+.wear-tip {
+  font-family: var(--display);
+  font-size: 31px;
+  font-weight: 600;
+  line-height: 1.12;
+}
+
+.wear-detail {
+  font-size: 19px;
+  margin-top: 4px;
+  color: var(--muted);
+}
+
+.weather-empty-art {
+  width: 200px;
+  height: 200px;
+  margin: 80px auto 20px;
+}
+
+.weather-empty {
+  font-family: var(--display);
+  font-size: 32px;
+  font-weight: 600;
+  text-align: center;
+}
+
+/* Kid columns */
+
+.weather,
+.kid-column {
+  box-shadow: 0 6px 0 rgba(74, 58, 58, 0.1);
+}
+
+.kid-column {
+  background:
+    linear-gradient(
+      color-mix(in srgb, var(--kid-bg) var(--frost), transparent),
+      color-mix(in srgb, var(--kid-bg) var(--frost), transparent)
+    ),
+    var(--frost-image, none) var(--bx, 0) var(--by, 0) / 1920px 1080px no-repeat;
+  padding: 24px 26px 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.kid-name-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  height: 92px;
+  flex-shrink: 0;
+}
+
+.mascot {
+  width: 104px;
+  height: 104px;
+  margin: -8px -6px 0 auto;
+  flex-shrink: 0;
+}
+
+.special,
+.activity {
+  position: relative;
+}
+
+/* Timeline: finished items fade back, the next one stands out. */
+.special.is-past,
+.activity.is-past {
+  opacity: 0.45;
+}
+
+/* The next item: a kid-colour outline (finished ones fade, so no label needed). */
+.activity.is-next,
+.special.is-next {
+  box-shadow: inset 0 0 0 3px var(--kid-ink);
+}
+
+.kid-name-row h2,
+.chore-head h2 {
+  font-family: var(--display);
+  font-size: 56px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--kid-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.avatar {
+  flex-shrink: 0;
+  border-radius: 999px;
+  border: 4px solid #fff;
+  object-fit: cover;
+  background: var(--kid-special, #eee);
+}
+
+.avatar-initial {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--kid-ink, var(--ink));
+  font-family: var(--display);
+  font-weight: 600;
+}
+
+/* A special is an activity row in the kid's colour, with its label above the
+   title: same shape, sticker and type as the rest of the day. */
+.special {
+  flex-shrink: 0;
+  height: 104px;
+  background: var(--kid-special);
+  border-radius: 26px;
+  padding: 10px 16px 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.special-sticker {
+  width: 72px;
+  height: 72px;
+  flex-shrink: 0;
+}
+
+.special-text,
+.activity-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.badge {
+  align-self: flex-start;
+  background: var(--kid-ink);
+  color: #fff;
+  border-radius: 999px;
+  padding: 4px 12px 1px; /* see .wear-label */
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  line-height: 1.3;
+}
+
+.special-title,
+.special-note,
+.activity-title,
+.activity-note,
+.note span,
+.strip-title,
+.chore-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.special-title {
+  font-family: var(--display);
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.1;
+  color: var(--kid-ink);
+}
+
+.special-note {
+  font-size: 20px;
+  color: var(--muted);
+}
+
+.special-time {
+  flex-shrink: 0;
+  background: #fff;
+  color: var(--kid-ink);
+  border-radius: 999px;
+  padding: 6px 16px;
+  font-family: var(--display);
+  font-size: 25px;
+  font-weight: 600;
+}
+
+.activity {
+  flex-shrink: 0;
+  height: 88px;
+  background: #fff;
+  border-radius: 26px;
+  padding: 10px 16px 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.activity > img {
+  width: 72px;
+  height: 72px;
+  flex-shrink: 0;
+}
+
+.activity-title {
+  font-family: var(--display);
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.activity-note {
+  font-size: 20px;
+  color: var(--muted);
+}
+
+.time-chip {
+  flex-shrink: 0;
+  background: var(--kid-chip);
+  color: var(--kid-ink);
+  border-radius: 999px;
+  padding: 6px 16px;
+  font-family: var(--display);
+  font-size: 25px;
+  font-weight: 600;
+}
+
+.note {
+  flex-shrink: 0;
+  height: 66px;
+  background: #fff1a6;
+  border-radius: 16px 16px 16px 4px;
+  padding: 8px 18px 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transform: rotate(-0.8deg);
+}
+
+.note img {
+  width: 46px;
+  height: 46px;
+  flex-shrink: 0;
+}
+
+.note span {
+  font-size: 23px;
+  font-weight: 800;
+}
+
+.free-day {
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 28px;
+  padding: 18px 24px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-family: var(--display);
+  font-size: 30px;
+  font-weight: 600;
+  color: var(--kid-ink);
+}
+
+/* Today: a kid's chores as a count, opening the Chores screen. */
+.chore-card {
+  margin-top: auto;
+  flex-shrink: 0;
+  height: 92px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: var(--kid-chip);
+  border-radius: 28px;
+  padding: 12px 14px 12px 12px;
+  text-align: left;
+  color: var(--kid-ink);
+}
+
+.chore-card.all-done {
+  background: #fff1a6;
+}
+
+.chore-card img {
+  width: 64px;
+  height: 64px;
+  flex-shrink: 0;
+}
+
+.chore-card-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chore-card-label {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 1.6px;
+}
+
+.chore-card-count {
+  font-family: var(--display);
+  font-size: 34px;
+  font-weight: 600;
+  line-height: 1.05;
+  color: var(--ink);
+}
+
+.chore-card-go,
+.week-chores-go {
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.more-chip {
+  align-self: flex-start;
+  flex-shrink: 0;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 999px;
+  padding: 0 18px;
+  font-size: 19px;
+  font-weight: 800;
+  color: var(--muted);
+}
+
+.empty-setup {
+  background: #f3efe6;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  gap: 16px;
+}
+
+.empty-setup h2 {
+  font-family: var(--display);
+  font-size: 48px;
+  font-weight: 600;
+}
+
+.empty-setup p {
+  font-size: 26px;
+}
+
+/* Week strip on Today */
+
+.week-strip {
+  flex: 1;
+  min-height: 0;
+  background:
+    linear-gradient(
+      color-mix(in srgb, #efe8ff var(--frost), transparent),
+      color-mix(in srgb, #efe8ff var(--frost), transparent)
+    ),
+    var(--frost-image, none) var(--bx, 0) var(--by, 0) / 1920px 1080px no-repeat;
+  border-radius: 40px;
+  padding: 18px 22px 18px 30px;
+  display: flex;
+  gap: 22px;
+}
+
+.week-strip-head {
+  width: 206px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 12px;
+}
+
+.week-strip-head h2 {
+  font-family: var(--display);
+  font-size: 42px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.week-strip-head .nav-button {
+  align-self: flex-start;
+  padding: 10px 20px;
+  font-size: 22px;
+}
+
+.week-strip-days {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 12px;
+}
+
+/* A day's chore counts at the foot of a strip day: "A 2/5". */
+.strip-chores {
+  margin-top: auto;
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+.strip-chore {
+  background: var(--kid-chip);
+  color: var(--kid-ink);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 17px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+/* A week day's Chores module: a count per kid, opening the Chores screen on that day. */
+.week-chores {
+  margin-top: auto;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 24px;
+  padding: 10px 8px 10px 12px;
+  text-align: left;
+  color: var(--ink);
+}
+
+.week-chores-list {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.week-chores-label {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  color: var(--lavender);
+}
+
+.week-chore {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 21px;
+  font-weight: 800;
+  color: var(--kid-ink);
+}
+
+.week-chore-kid {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--kid-chip);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--display);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.week-chores-go {
+  width: 40px;
+  height: 40px;
+  background: #ece6fb;
+  color: var(--lavender);
+}
+
+.strip-day {
+  min-width: 0;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.62);
+  border: 4px solid transparent;
+  border-radius: 26px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/*
+ * Days already gone this week (weeks start on Monday) fade their plans back;
+ * the frosted card stays solid (fading it shows the painting through) and
+ * the chore counts stay bright.
+ */
+.strip-day.is-past > :not(.strip-chores),
+.week-day.is-past > :not(.week-chores) {
+  opacity: 0.5;
+}
+
+.strip-day.is-today {
+  background: #fff;
+  border-color: var(--ink);
+}
+
+.strip-day-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.dow {
+  font-size: 19px;
+  font-weight: 800;
+  color: var(--lavender);
+}
+
+.dom {
+  font-family: var(--display);
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.strip-item {
+  height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  background: var(--who-bg);
+  border-radius: 14px;
+  padding: 0 10px 0 2px;
+}
+
+.strip-item img {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  margin: -4px 0;
+}
+
+.strip-title {
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1.15;
+  color: var(--who);
+}
+
+.strip-more {
+  height: 26px;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--lavender);
+  padding-left: 6px;
+}
+
+.strip-quiet {
+  font-size: 17px;
+  color: #5f5578;
+  margin-top: 4px;
+}
+
+/* ---------- Week screen ---------- */
+
+.week-head {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  min-width: 0;
+}
+
+.week-pager {
+  display: flex;
+  gap: 12px;
+}
+
+/* Round header buttons. */
+.header-button.page-button {
+  width: 72px;
+  padding: 0;
+  justify-content: center;
+}
+
+.page-button svg {
+  width: 28px;
+  height: 28px;
+}
+
+.page-button:disabled {
+  opacity: 0.25;
+  box-shadow: none;
+}
+
+.top h1.week-title {
+  display: flex;
+  align-items: baseline;
+  gap: 20px;
+  white-space: nowrap;
+}
+
+.week-dates {
+  font-size: 32px;
+  font-weight: 600;
+  color: var(--lavender);
+  letter-spacing: 0;
+}
+
+.week-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.week-day {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  background:
+    linear-gradient(
+      color-mix(in srgb, #fff var(--frost), transparent),
+      color-mix(in srgb, #fff var(--frost), transparent)
+    ),
+    var(--frost-image, none) var(--bx, 0) var(--by, 0) / 1920px 1080px no-repeat;
+  border: 4px solid #fff;
+  border-radius: 34px;
+  padding: 18px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.week-day.is-today {
+  border-color: var(--ink);
+}
+
+.week-day-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.week-day-head .dow {
+  font-size: 20px;
+  letter-spacing: 2px;
+}
+
+.week-day-head .dom {
+  font-size: 52px;
+}
+
+.today-tag {
+  background: var(--ink);
+  color: #fff;
+  border-radius: 999px;
+  padding: 3px 14px;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 2px;
+}
+
+.week-item {
+  position: relative;
+  flex-shrink: 0;
+  /* Every item is tinted in its owner's colour; ones with details carry an ⓘ. */
+  background: var(--who-bg);
+  border-radius: 20px;
+  padding: 10px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.week-item-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 40px;
+}
+
+.week-item-top img {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+}
+
+.week-time {
+  font-family: var(--display);
+  font-size: 20px;
+  font-weight: 600;
+  color: #5f5578;
+  white-space: nowrap;
+}
+
+.week-item-title {
+  font-size: 21px;
+  font-weight: 800;
+  line-height: 25px;
+  overflow-wrap: anywhere;
+}
+
+.who-chip {
+  margin-left: auto;
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 15px;
+  font-weight: 800;
+  white-space: nowrap;
+  background: var(--who-bg);
+  color: var(--who);
+}
+
+.week-item .who-chip {
+  background: #fff;
+}
+
+/* Keep the last title line clear of the ⓘ in the corner. */
+.week-item[data-action="details"] .week-item-title {
+  padding-right: 26px;
+}
+
+.week-item .tap-hint {
+  /* Mirrors the name chip in the opposite corner: same inset, same height. */
+  color: var(--who);
+  right: 12px;
+  bottom: 17.5px;
+  width: 22px;
+  height: 22px;
+}
+
+.week-item .tap-hint svg {
+  width: 22px;
+  height: 22px;
+}
+
+button.more-chip {
+  border: none;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.day-sheet-items {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  overflow: hidden;
+}
+
+.week-free {
+  font-size: 19px;
+  color: #5f5578;
+  text-align: center;
+  margin-top: 10px;
+}
+
+/* ---------- Chores screen ---------- */
+
+.chores-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  gap: 24px;
+}
+
+.chore-panel {
+  box-shadow: 0 6px 0 rgba(74, 58, 58, 0.1);
+  background:
+    linear-gradient(
+      color-mix(in srgb, var(--kid-bg) var(--frost), transparent),
+      color-mix(in srgb, var(--kid-bg) var(--frost), transparent)
+    ),
+    var(--frost-image, none) var(--bx, 0) var(--by, 0) / 1920px 1080px no-repeat;
+  padding: 22px 28px 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.chore-head {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.chore-head-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chore-head-text > span {
+  font-size: 23px;
+  font-weight: 800;
+  color: var(--kid-ink);
+}
+
+.chore-count {
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 999px;
+  padding: 6px 22px;
+  font-family: var(--display);
+  font-size: 32px;
+  font-weight: 600;
+  color: var(--kid-ink);
+  white-space: nowrap;
+}
+
+/* The Chores screen's day: arrows either side of its name. */
+.chore-day-nav {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.chore-day {
+  min-width: 380px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.chore-day-name {
+  font-family: var(--display);
+  font-size: 38px;
+  font-weight: 600;
+  line-height: 1.05;
+  white-space: nowrap;
+}
+
+.chore-day-rel {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--muted);
+}
+
+.chore-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.period-label {
+  align-self: flex-start;
+  background: rgba(255, 255, 255, 0.75);
+  border-radius: 999px;
+  padding: 5px 16px;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  color: var(--kid-ink);
+}
+
+.chore-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.chore-tile {
+  height: 108px;
+  text-align: left;
+  background: #fff;
+  border: 4px solid #fff;
+  border-radius: 30px;
+  padding: 8px 16px 8px 8px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.chore-tile img {
+  width: 88px;
+  height: 88px;
+  flex-shrink: 0;
+}
+
+.chore-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chore-title {
+  font-family: var(--display);
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.chore-state {
+  font-size: 18px;
+  font-weight: 800;
+  color: #6e5f5f;
+}
+
+.check {
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  border: 4px solid #d9cccc;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chore-tile.done {
+  background: var(--kid-special);
+  border-color: var(--kid-ink);
+}
+
+.chore-tile.done img {
+  transform: rotate(-5deg);
+}
+
+.chore-tile.done .chore-state {
+  color: var(--kid-ink);
+}
+
+/* An earlier day's chore nobody ticked: still tappable, outlined, no red. */
+.chore-tile.missed {
+  border-style: dashed;
+  border-color: var(--kid-ink);
+}
+
+/* A day ahead: shown, not tickable. */
+.chore-tile.ahead {
+  background: rgba(255, 255, 255, 0.55);
+  border-color: transparent;
+}
+
+.chore-tile.ahead img {
+  opacity: 0.75;
+}
+
+.chore-tile.done .check {
+  background: var(--kid-ink);
+  border-color: var(--kid-ink);
+}
+
+.cheer {
+  margin-top: auto;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 28px;
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-family: var(--display);
+  font-size: 30px;
+  font-weight: 600;
+  color: var(--kid-ink);
+}
+
+.celebrate {
+  margin-top: auto;
+  background: #fff1a6;
+  border: 4px solid var(--kid-ink);
+  border-radius: 32px;
+  padding: 4px 28px 4px 10px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  box-shadow: 0 5px 0 var(--kid-ink);
+}
+
+.celebrate img {
+  width: 150px;
+  height: 150px;
+  margin: -24px 0 -8px;
+  animation: hop 0.9s ease-in-out 2;
+}
+
+.celebrate-title {
+  display: block;
+  font-family: var(--display);
+  font-size: 42px;
+  font-weight: 600;
+  color: var(--kid-ink);
+}
+
+.celebrate span:not(.celebrate-title) {
+  display: block;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+@keyframes hop {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-18px) rotate(-4deg);
+  }
+}
+
+.chores-empty {
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+}
+
+.chores-empty h2 {
+  font-family: var(--display);
+  font-size: 48px;
+  font-weight: 600;
+}
+
+/* ---------- Misc ---------- */
+
+.splash {
+  height: 1080px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  font-family: var(--display);
+  font-size: 40px;
+  font-weight: 600;
+}
+
+/* ---- Tap for details ----
+ * Shown and hidden instantly (no transition): a fade here measured as jank
+ * on the frame, like screen switches. The backdrop is a flat translucent
+ * colour, not a blur. */
+
+[data-action="details"] {
+  position: relative;
+  cursor: pointer;
+}
+
+/* Room for the ⓘ in the corner of Today's cards: only the bottom line needs it. */
+.special[data-action="details"] .special-note,
+.activity[data-action="details"] .activity-note {
+  padding-right: 30px;
+}
+
+.tap-hint {
+  position: absolute;
+  right: 14px;
+  bottom: 12px;
+  width: 24px;
+  height: 24px;
+  color: var(--kid-ink, var(--lavender));
+  line-height: 0;
+}
+
+.sheet {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  background: rgba(74, 58, 58, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sheet[hidden] {
+  display: none;
+}
+
+/* The joke of the day: setup, a big "Tell me!", then the punchline with a hop. */
+.sheet-card.joke-sheet {
+  width: 1260px;
+  padding: 36px 48px 40px;
+  gap: 18px;
+}
+
+.joke-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.joke-tag {
+  background: var(--lavender);
+  color: #fff;
+  border-radius: 999px;
+  padding: 8px 20px 5px;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 2px;
+}
+
+.joke-close {
+  width: 72px;
+  height: 72px;
+  border-radius: 999px;
+  background: #fff;
+  border: 4px solid var(--ink);
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.joke-body {
+  display: flex;
+  align-items: center;
+  gap: 36px;
+  min-height: 320px;
+}
+
+.joke-bear {
+  width: 260px;
+  height: 260px;
+  flex-shrink: 0;
+}
+
+.hop {
+  animation: hop 0.9s ease-in-out 2;
+}
+
+.joke-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 22px;
+}
+
+.joke-setup,
+.joke-punch {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 56px;
+  font-weight: 600;
+  line-height: 1.12;
+}
+
+.joke-punch {
+  color: #a3326a;
+}
+
+.joke-reveal {
+  height: 96px;
+  padding: 0 56px;
+  background: #ffd84d;
+  border: 5px solid var(--ink);
+  border-radius: 999px;
+  box-shadow: 0 6px 0 var(--ink);
+  font-family: var(--display);
+  font-size: 44px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.joke-drum {
+  background: #fff1a6;
+  border-radius: 999px;
+  padding: 6px 18px;
+  font-size: 24px;
+  font-weight: 800;
+  transform: rotate(-4deg);
+}
+
+.joke-foot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+}
+
+.joke-next {
+  height: 84px;
+  padding: 0 48px;
+  background: var(--lavender);
+  border: 5px solid var(--ink);
+  border-radius: 999px;
+  box-shadow: 0 6px 0 var(--ink);
+  font-family: var(--display);
+  font-size: 36px;
+  font-weight: 600;
+  color: #fff;
+}
+
+/* On this day, and the day's place. */
+.sheet-card.facts-sheet {
+  width: 1400px;
+  padding: 34px 48px 26px;
+  gap: 18px;
+}
+
+.facts-when {
+  margin-right: auto;
+  margin-left: 16px;
+  font-family: var(--display);
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--lavender);
+}
+
+.facts-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 32px;
+  min-height: 0;
+}
+
+.history-picture {
+  width: 340px;
+  max-height: 440px;
+  object-fit: cover;
+  border-radius: 24px;
+  border: 4px solid var(--ink);
+  flex-shrink: 0;
+}
+
+.history-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+
+.history-event {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+}
+
+.history-year {
+  flex-shrink: 0;
+  min-width: 108px;
+  text-align: center;
+  background: #ece6fb;
+  color: var(--lavender);
+  border-radius: 999px;
+  padding: 6px 16px;
+  font-family: var(--display);
+  font-size: 30px;
+  font-weight: 600;
+}
+
+.history-text {
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.place-name {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 18px;
+  font-family: var(--display);
+  font-size: 64px;
+  font-weight: 600;
+  line-height: 1.05;
+}
+
+.place-where {
+  font-size: 32px;
+  color: var(--muted);
+}
+
+.place-map {
+  width: 560px;
+  max-height: 440px;
+  object-fit: contain;
+  border-radius: 20px;
+  background: #fff;
+  flex-shrink: 0;
+}
+
+.place-text {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+
+.place-facts {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.place-fact {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+}
+
+.place-fact dt {
+  min-width: 110px;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--lavender);
+}
+
+.place-fact dd {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 32px;
+  font-weight: 600;
+}
+
+.place-blurb {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+/* Trivia: a question, four big answers, the right one lit up after a pick. */
+.sheet-card.trivia-sheet {
+  width: 1320px;
+  padding: 34px 48px 26px;
+  gap: 18px;
+}
+
+.trivia-category {
+  margin-right: auto;
+  margin-left: 14px;
+  background: #ece6fb;
+  color: var(--lavender);
+  border-radius: 999px;
+  padding: 6px 18px;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.trivia-question {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 48px;
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+.trivia-answers {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.trivia-answer {
+  min-height: 96px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: #fff;
+  border: 4px solid var(--ink);
+  border-radius: 28px;
+  box-shadow: 0 5px 0 var(--ink);
+  padding: 10px 22px 10px 12px;
+  text-align: left;
+  color: var(--ink);
+}
+
+.trivia-letter {
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: #ece6fb;
+  color: var(--lavender);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--display);
+  font-size: 30px;
+  font-weight: 600;
+}
+
+.trivia-text {
+  font-family: var(--display);
+  font-size: 32px;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.trivia-answer.is-right {
+  background: #c9ead0;
+  border-color: #2c6439;
+  box-shadow: 0 5px 0 #2c6439;
+}
+
+.trivia-answer.is-right .trivia-letter {
+  background: #2c6439;
+  color: #fff;
+}
+
+.trivia-answer.is-picked {
+  background: #ffe8d6;
+  border-style: dashed;
+}
+
+.trivia-answer.is-other {
+  opacity: 0.45;
+}
+
+.trivia-result {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  min-height: 100px;
+}
+
+.trivia-bear {
+  width: 120px;
+  height: 120px;
+  margin: -10px 0;
+}
+
+.trivia-verdict {
+  flex: 1;
+  font-family: var(--display);
+  font-size: 36px;
+  font-weight: 600;
+}
+
+.trivia-verdict strong {
+  color: #2c6439;
+}
+
+.trivia-score {
+  font-family: var(--display);
+  font-size: 32px;
+  font-weight: 600;
+  color: var(--lavender);
+}
+
+.trivia-credit {
+  align-self: center;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.joke-done {
+  font-family: var(--display);
+  font-size: 32px;
+  font-weight: 600;
+  color: var(--lavender);
+}
+
+.sheet-card {
+  width: 1120px;
+  max-height: 920px;
+  overflow: hidden;
+  background: var(--paper);
+  border: 5px solid var(--ink);
+  border-radius: 48px;
+  box-shadow: 0 10px 0 var(--ink);
+  padding: 44px 56px 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.sheet-head {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+}
+
+.sheet-head > img {
+  width: 128px;
+  height: 128px;
+  flex-shrink: 0;
+}
+
+.sheet-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sheet-title {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 60px;
+  font-weight: 600;
+  line-height: 1.05;
+}
+
+.sheet-when {
+  font-family: var(--display);
+  font-size: 32px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.sheet-note {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 40px;
+  font-weight: 600;
+  color: var(--lavender);
+}
+
+.sheet-details {
+  margin: 0;
+  font-size: 34px;
+  line-height: 1.4;
+  white-space: pre-line;
+  overflow: hidden;
+}
+
+.sheet-foot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 32px;
+}
+
+.sheet-edit {
+  height: 64px;
+  font-size: 28px;
+  padding: 0 40px;
+}
+
+.sheet-close {
+  align-self: center;
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--muted);
+}
+
+.status {
+  position: absolute;
+  right: 18px;
+  bottom: 10px;
+  background: var(--ink);
+  color: #fff;
+  border-radius: 999px;
+  padding: 6px 16px;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+/* A slow bob for the weather and mascot art: transform-only, its own layer. */
+@keyframes bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-7px);
+  }
+}
+
+.bob {
+  animation: bob 5s ease-in-out infinite;
+  will-change: transform;
+}
+
+.kid-column:nth-child(3) .bob {
+  animation-delay: -2.5s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bob {
+    animation: none;
+  }
+
+  .celebrate img {
+    animation: none;
+  }
+}

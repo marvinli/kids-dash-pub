@@ -1,0 +1,37 @@
+{
+  "name": "@kids-dash/mcp",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "stdio MCP server for agents: tools that call the kids-dash admin API with SigV4.",
+  "exports": {
+    "./server": "./src/mcp.ts",
+    "./transport": "./src/transport.ts"
+  },
+  "bin": {
+    "kids-dash-mcp": "dist/server.js",
+    "kids-dash-admin": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "lint": "biome check src build.mjs && tsc -p tsconfig.json",
+    "test": "vitest run",
+    "coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@aws-crypto/sha256-js": "^5.2.0",
+    "@aws-sdk/credential-providers": "^3.1169.0",
+    "@kids-dash/core": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "@smithy/protocol-http": "^5.6.2",
+    "@smithy/signature-v4": "^5.7.5",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.3",
+    "@vitest/coverage-v8": "^5.1.0",
+    "esbuild": "^0.28.2",
+    "typescript": "~5.9.3",
+    "vitest": "^5.1.0"
+  }
+}

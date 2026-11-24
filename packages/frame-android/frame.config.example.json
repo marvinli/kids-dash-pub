@@ -1,0 +1,5 @@
+{
+  "apiUrl": "https://<api-id>.execute-api.<region>.amazonaws.com",
+  "keyId": "<keyId from kids-dash-admin signing-key>",
+  "publicKeyPem": "<publicKeyPem from kids-dash-admin signing-key>"
+}

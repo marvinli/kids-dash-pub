@@ -1,0 +1,31 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": ["tsconfig.base.json", "biome.jsonc", "assets/art/web/**"],
+  "globalPassThroughEnv": [
+    "JAVA_17_HOME",
+    "JAVA_HOME",
+    "ANDROID_SDK",
+    "ANDROID_HOME",
+    "ANDROID_SDK_ROOT"
+  ],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", "build/**"]
+    },
+    "lint": {
+      "dependsOn": ["^build"]
+    },
+    "test": {
+      "dependsOn": ["^build"]
+    },
+    "coverage": {
+      "dependsOn": ["^build"],
+      "outputs": ["coverage/**"]
+    },
+    "synth": {
+      "dependsOn": ["^build"],
+      "cache": false
+    }
+  }
+}

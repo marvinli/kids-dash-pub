@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+#
+# Two gates, both on the STAGED content (not the working tree):
+#
+# 1. Private material. This folder also holds device recovery evidence, raw
+#    bootloader dumps and ADB authorization keys under the git-ignored local/.
+#    .gitignore keeps them out of `git add -A`, but a forced add or a stray copy
+#    would push them to GitHub, where deleting them later is not enough. Refuse
+#    anything under local/, any adbkey, signing keystore, or raw disk image.
+#
+# 2. Biome, so a commit CI would reject never gets made. Staged blobs are copied
+#    into a temp tree with the config and checked there. It never rewrites files:
+#    run `pnpm check` and stage the result.
+set -uo pipefail
+
+root=$(git rev-parse --show-toplevel)
+
+blocked=()
+while IFS= read -r -d '' path; do
+  case "$path" in
+    local/* | */adbkey* | adbkey* | *.p12 | *.pem | *.img | *.bin) blocked+=("$path") ;;
+  esac
+done < <(git diff --cached --name-only --diff-filter=ACMR -z)
+
+if [ ${#blocked[@]} -gt 0 ]; then
+  echo "Refusing to commit private or device-recovery material:" >&2
+  printf '  %s\n' "${blocked[@]}" >&2
+  echo "Unstage with: git restore --staged <path>" >&2
+  exit 1
+fi
+
+biome="$root/node_modules/.bin/biome"
+[ -x "$biome" ] || exit 0
+
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+cp "$root/biome.jsonc" "$tmp/biome.jsonc"
+
+paths=()
+while IFS= read -r -d '' path; do
+  case "$path" in
+    *.ts | *.tsx | *.js | *.mjs | *.json | *.jsonc) ;;
+    *) continue ;;
+  esac
+  mkdir -p "$tmp/$(dirname "$path")"
+  git show ":$path" > "$tmp/$path" || exit 1
+  paths+=("$path")
+done < <(git diff --cached --name-only --diff-filter=ACMR -z)
+
+[ ${#paths[@]} -eq 0 ] && exit 0
+
+if ! (cd "$tmp" && "$biome" check --no-errors-on-unmatched "${paths[@]}"); then
+  printf '\nBiome rejected the staged files. Run `pnpm check`, then stage the result.\n' >&2
+  exit 1
+fi

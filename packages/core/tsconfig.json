@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // Core must run unchanged in Lambda, the MCP and the frame's WebView, so it
+    // gets no Node or DOM typings: a stray `node:` import or `Buffer` fails tsc.
+    "types": []
+  },
+  "include": ["src/**/*.ts"]
+}
